@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Galerie de arta</title>
+    <script src="https://aframe.io/releases/1.4.0/aframe.min.js"></script>
+    <script>
+      AFRAME.registerComponent('limit-movement', {
+        tick: function () {
+          var pos = this.el.getAttribute('position');
+
+          // 1. Limite perimetru exterior (pereții exteriori)
+          if (pos.x < -8.5) pos.x = -8.5;
+          if (pos.x > 8.5) pos.x = 8.5;
+          if (pos.z < -6.5) pos.z = -6.5;
+          if (pos.z > 6.5) pos.z = 6.5;
+
+          // 2. Blocare PERETE MIJLOC (a-box position="0 2 -2.5" depth="10")
+          if (Math.abs(pos.x) < 0.6 && pos.z < 2.8 && pos.z > -7.5) {
+            pos.x = (pos.x > 0) ? 0.6 : -0.6;
+          }
+
+          this.el.setAttribute('position', pos);
+        }
+      });
+    </script>
+  </head>
+  <body>
+    <a-scene>
+      
+      <!-- LUMINI (esențiale pentru vizibilitate) -->
+      <a-entity light="type: ambient; color: #BBB; intensity: 0.6"></a-entity>
+      <a-entity light="type: directional; color: #FFF; intensity: 0.5" position="-2 5 3"></a-entity>
+      <a-entity light="type: point; color: #FFE0B2; intensity: 0.4; distance: 10" position="0 3.5 0"></a-entity>
+
+      <!-- Cer -->
+      <a-sky color="#000814"></a-sky>
+
+      <!-- Cameră -->
+      <a-camera position="-5 1.6 5" limit-movement>
+        <a-cursor color="yellow"></a-cursor>
+      </a-camera>
+
+      <!-- Podea -->
+      <a-plane position="0 0 0" rotation="-90 0 0" width="20" height="15" 
+               src="https://raw.githubusercontent.com/aframevr/sample-assets/master/assets/images/wood/hardwood2_diffuse.jpg" 
+               repeat="10 10">
+      </a-plane>
+
+      <!-- Pereți exteriori -->
+      <a-box position="0 2 -7.5" width="20" height="4" depth="0.5" color="#D2C4A7"></a-box>
+      <a-box position="0 2 7.5" width="20" height="4" depth="0.5" color="#D2C4A7"></a-box>
+      <a-box position="-10 2 0" width="0.5" height="4" depth="15" color="#D2C4A7"></a-box>
+      <a-box position="10 2 0" width="0.5" height="4" depth="15" color="#D2C4A7"></a-box>
+
+      <!-- Perete mijloc -->
+      <a-box position="0 2 -2.5" width="0.5" height="4" depth="10" color="#D2C4A7"></a-box>
+
+      <!-- ========== PERETELE STÂNGA ========== -->
+      
+      <!-- TABLOU 1 - Sunflowers -->
+      <a-box position="-9.6 2 2" width="3" height="2.2" depth="0.1" rotation="0 90 0" src="TABLOU NR 1.jpg" onclick="alert('Ai dat click pe Sunflowers!')"></a-box>
+      <!-- Rama tablou 1 -->
+      <a-box position="-9.7 0.85 2" width="3.2" height="0.1" depth="0.2" rotation="0 90 0" color="#5D4037"></a-box>
+      <a-box position="-9.7 3.15 2" width="3.2" height="0.1" depth="0.2" rotation="0 90 0" color="#5D4037"></a-box>
+      <a-box position="-9.7 2 3.55" width="0.1" height="2.4" depth="0.2" rotation="0 90 0" color="#5D4037"></a-box>
+      <a-box position="-9.7 2 0.45" width="0.1" height="2.4" depth="0.2" rotation="0 90 0" color="#5D4037"></a-box>
+      <!-- Eticheta tablou 1 -->
+      <a-box position="-9.65 0.5 2" width="0.8" height="0.3" depth="0.05" rotation="0 90 0" color="#DDDDDD"></a-box>
+      <a-text value="Sunflower" color="black" align="center" width="1.5" position="-9.62 0.5 2" rotation="0 90 0"></a-text>
+
+      <!-- TABLOU 2 - Starry Night -->
+      <a-box position="-9.6 2 -1.5" width="3" height="2.2" depth="0.1" rotation="0 90 0" src="TABLOU NR 2.jpg"></a-box>
+      <!-- Rama tablou 2 -->
+      <a-box position="-9.7 0.85 -1.5" width="3.2" height="0.1" depth="0.2" rotation="0 90 0" color="#5D4037"></a-box>
+      <a-box position="-9.7 3.15 -1.5" width="3.2" height="0.1" depth="0.2" rotation="0 90 0" color="#5D4037"></a-box>
+      <a-box position="-9.7 2 0.05" width="0.1" height="2.4" depth="0.2" rotation="0 90 0" color="#5D4037"></a-box>
+      <a-box position="-9.7 2 -3.05" width="0.1" height="2.4" depth="0.2" rotation="0 90 0" color="#5D4037"></a-box>
+      <!-- Eticheta tablou 2 -->
+      <a-box position="-9.65 0.5 -1.5" width="0.8" height="0.3" depth="0.05" rotation="0 90 0" color="#DDDDDD"></a-box>
+      <a-text value="Starry Night" color="black" align="center" width="1.5" position="-9.59 0.5 -1.5" rotation="0 90 0"></a-text>
+
+      <!-- Felinare stânga -->
+      <a-entity position="-9.5 2.5 4">
+        <a-box position="0.15 0 0" width="0.3" height="0.05" depth="0.05" color="#8B7355"></a-box>
+        <a-box position="0 0.2 0" width="0.05" height="0.4" depth="0.05" color="#8B7355"></a-box>
+        <a-box position="0 -0.15 0" width="0.5" height="0.4" depth="0.3" color="#D4A017" opacity="0.8"></a-box>
+        <a-sphere position="0 -0.15 0" radius="0.12" color="#FFD700" opacity="0.6"></a-sphere>
+      </a-entity>
+      <a-entity position="-9.5 2.5 -3.5">
+        <a-box position="0.15 0 0" width="0.3" height="0.05" depth="0.05" color="#8B7355"></a-box>
+        <a-box position="0 0.2 0" width="0.05" height="0.4" depth="0.05" color="#8B7355"></a-box>
+        <a-box position="0 -0.15 0" width="0.5" height="0.4" depth="0.3" color="#D4A017" opacity="0.8"></a-box>
+        <a-sphere position="0 -0.15 0" radius="0.12" color="#FFD700" opacity="0.6"></a-sphere>
+      </a-entity>
+
+      <!-- ========== PERETELE DREAPTA ========== -->
+
+      <!-- TABLOU 3 - Irises -->
+      <a-box position="9.6 2 2" width="3" height="2.2" depth="0.1" rotation="0 -90 0" src="TABLOU NR 3.jpg"></a-box>
+      <!-- Rama tablou 3 -->
+      <a-box position="9.7 0.85 2" width="3.2" height="0.1" depth="0.2" rotation="0 -90 0" color="#5D4037"></a-box>
+      <a-box position="9.7 3.15 2" width="3.2" height="0.1" depth="0.2" rotation="0 -90 0" color="#5D4037"></a-box>
+      <a-box position="9.7 2 3.55" width="0.1" height="2.4" depth="0.2" rotation="0 -90 0" color="#5D4037"></a-box>
+      <a-box position="9.7 2 0.45" width="0.1" height="2.4" depth="0.2" rotation="0 -90 0" color="#5D4037"></a-box>
+      <!-- Eticheta tablou 3 -->
+      <a-box position="9.65 0.5 2" width="0.8" height="0.3" depth="0.05" rotation="0 -90 0" color="#DDDDDD"></a-box>
+      <a-text value="Irises" color="black" align="center" width="1.5" position="9.59 0.5 2" rotation="0 -90 0"></a-text>
+
+      <!-- TABLOU 4 - Almond Blossom -->
+      <a-box position="9.6 2 -1.5" width="3" height="2.2" depth="0.1" rotation="0 -90 0" src="TABLOU NR 4.jpg"></a-box>
+      <!-- Rama tablou 4 -->
+      <a-box position="9.7 0.85 -1.5" width="3.2" height="0.1" depth="0.2" rotation="0 -90 0" color="#5D4037"></a-box>
+      <a-box position="9.7 3.15 -1.5" width="3.2" height="0.1" depth="0.2" rotation="0 -90 0" color="#5D4037"></a-box>
+      <a-box position="9.7 2 0.05" width="0.1" height="2.4" depth="0.2" rotation="0 -90 0" color="#5D4037"></a-box>
+      <a-box position="9.7 2 -3.05" width="0.1" height="2.4" depth="0.2" rotation="0 -90 0" color="#5D4037"></a-box>
+      <!-- Eticheta tablou 4 -->
+      <a-box position="9.65 0.5 -1.5" width="0.8" height="0.3" depth="0.05" rotation="0 -90 0" color="#DDDDDD"></a-box>
+      <a-text value="Almond Blossom" color="black" align="center" width="1.5" position="9.59 0.5 -1.5" rotation="0 -90 0"></a-text>
+
+      <!-- Felinare dreapta -->
+      <a-entity position="9.5 2.5 4">
+        <a-box position="-0.15 0 0" width="0.3" height="0.05" depth="0.05" color="#8B7355"></a-box>
+        <a-box position="0 0.2 0" width="0.05" height="0.4" depth="0.05" color="#8B7355"></a-box>
+        <a-box position="0 -0.15 0" width="0.5" height="0.4" depth="0.3" color="#D4A017" opacity="0.8"></a-box>
+        <a-sphere position="0 -0.15 0" radius="0.12" color="#FFD700" opacity="0.6"></a-sphere>
+      </a-entity>
+      <a-entity position="9.5 2.5 -3.5">
+        <a-box position="-0.15 0 0" width="0.3" height="0.05" depth="0.05" color="#8B7355"></a-box>
+        <a-box position="0 0.2 0" width="0.05" height="0.4" depth="0.05" color="#8B7355"></a-box>
+        <a-box position="0 -0.15 0" width="0.5" height="0.4" depth="0.3" color="#D4A017" opacity="0.8"></a-box>
+        <a-sphere position="0 -0.15 0" radius="0.12" color="#FFD700" opacity="0.6"></a-sphere>
+      </a-entity>
+
+      <!-- ========== PERETELE DIN FAȚĂ ========== -->
+      
+           <!-- ========== PERETELE DIN FAȚĂ ========== -->
+      
+      <!-- TABLOU 5 - Autoportret -->
+      <a-box position="0 2 7.15" width="3" height="2.2" depth="0.1" rotation="0 0 0" src="TABLOU NR 5.jpg"></a-box>
+      <!-- Rama tablou 5 -->
+      <a-box position="0 0.85 7.2" width="3.2" height="0.1" depth="0.2" rotation="0 0 0" color="#5D4037"></a-box>
+      <a-box position="0 3.15 7.2" width="3.2" height="0.1" depth="0.2" rotation="0 0 0" color="#5D4037"></a-box>
+      <a-box position="1.55 2 7.2" width="0.1" height="2.4" depth="0.2" rotation="0 0 0" color="#5D4037"></a-box>
+      <a-box position="-1.55 2 7.2" width="0.1" height="2.4" depth="0.2" rotation="0 0 0" color="#5D4037"></a-box>
+      
+      <!-- Eticheta tablou 5 (CORECTAT: rotation 0 0 0 ca să privească spre interior) -->
+      <a-box position="0 0.5 7.08" width="0.8" height="0.3" depth="0.05" rotation="0 0 0" color="#DDDDDD"></a-box>
+      <a-text value="Autoportret" color="black" align="center" width="1.5" position="0 0.5 7.06" rotation="0 0 0"></a-text>
+
+      <!-- ========== PERETELE DIN SPATE ========== -->
+
+      <!-- TABLOU 6 - Potato Eaters -->
+      <a-box position="-5 2 -7.15" width="3" height="2.2" depth="0.1" rotation="0 0 0" src="TABLOU NR 6.jpg"></a-box>
+      <!-- Rama tablou 6 -->
+      <a-box position="-5 0.85 -7.2" width="3.2" height="0.1" depth="0.2" rotation="0 0 0" color="#5D4037"></a-box>
+      <a-box position="-5 3.15 -7.2" width="3.2" height="0.1" depth="0.2" rotation="0 0 0" color="#5D4037"></a-box>
+      <a-box position="-3.45 2 -7.2" width="0.1" height="2.4" depth="0.2" rotation="0 0 0" color="#5D4037"></a-box>
+      <a-box position="-6.55 2 -7.2" width="0.1" height="2.4" depth="0.2" rotation="0 0 0" color="#5D4037"></a-box>
+      
+      <!-- Eticheta tablou 6 (CORECTAT: rotation 0 180 0 ca să privească spre interior) -->
+      <a-box position="-5 0.5 -7.08" width="0.8" height="0.3" depth="0.05" rotation="0 180 0" color="#DDDDDD"></a-box>
+      <a-text value="Potato Eaters" color="black" align="center" width="1.5" position="-5 0.5 -7.06" rotation="0 180 0"></a-text>
+
+      <!-- ========== HOTSPOT-URI INTERACTIVE ========== -->
+
+      <!-- Hotspot Starry Night -->
+      <a-sphere position="-9.4 1.8 -3.5" radius="0.1" color="#4A90E2" 
+                animation="property: scale; to: 1.2 1.2 1.2; dir: alternate; dur: 1000; loop: true"
+                onclick="
+                  var info = document.querySelector('#info-box');
+                  document.querySelector('#info-text').setAttribute('value', 'Van Gogh a pictat aceasta scena \n din chilia sa din azilul \n Saint-Paul-de-Mausole.');
+                  info.setAttribute('visible', 'true');
+                  info.setAttribute('position', '-7 2.5 -1.5');
+                  info.setAttribute('rotation', '0 90 0');
+                ">
+      </a-sphere>
+
+      <!-- Hotspot Sunflowers -->
+      <a-sphere position="-9.4 1.8 4.0" radius="0.1" color="#F39C12" 
+                animation="property: scale; to: 1.2 1.2 1.2; dir: alternate; dur: 1000; loop: true"
+                onclick="
+                  var info = document.querySelector('#info-box');
+                  document.querySelector('#info-text').setAttribute('value', 'Van Gogh a pictat aceasta serie \n pentru a decora camera prietenului sau, \n Paul Gauguin, in Arles.');
+                  info.setAttribute('visible', 'true');
+                  info.setAttribute('position', '-7 2.5 2'); 
+                  info.setAttribute('rotation', '0 90 0');
+                ">
+      </a-sphere>
+
+      <!-- Hotspot Irises -->
+      <a-sphere position="9.4 1.8 4.0" radius="0.1" color="#27AE60" 
+                animation="property: scale; to: 1.2 1.2 1.2; dir: alternate; dur: 1000; loop: true"
+                onclick="
+                  var info = document.querySelector('#info-box');
+                  document.querySelector('#info-text').setAttribute('value', 'Irises a fost pictat in gradina \n azilului din Saint-Remy, cu doar \n un an inainte de moartea sa.');
+                  info.setAttribute('visible', 'true');
+                  info.setAttribute('position', '8 2.2 2');
+                  info.setAttribute('rotation', '0 -90 0');
+                ">
+      </a-sphere>
+
+      <!-- Hotspot Almond Blossom -->
+      <a-sphere position="9.4 1.8 -3.5" radius="0.1" color="#85C1E9" 
+                animation="property: scale; to: 1.2 1.2 1.2; dir: alternate; dur: 1000; loop: true"
+                onclick="
+                  var info = document.querySelector('#info-box');
+                  document.querySelector('#info-text').setAttribute('value', 'Ramuri de migdal inflorit a fost \n un cadou pentru fratele sau, Theo, \n la nasterea fiului acestuia.');
+                  info.setAttribute('visible', 'true');
+                  info.setAttribute('position', '8 2.2 -1.5');
+                  info.setAttribute('rotation', '0 -90 0');
+                ">
+      </a-sphere>
+
+      <!-- Hotspot Potato Eaters -->
+      <a-sphere position="-3.0 1.8 -7.0" radius="0.1" color="#E67E22" 
+                animation="property: scale; to: 1.2 1.2 1.2; dir: alternate; dur: 1000; loop: true"
+                onclick="
+                  var info = document.querySelector('#info-box');
+                  document.querySelector('#info-text').setAttribute('value', 'Această operă timpurie reflectă respectul profund al lui Van Gogh pentru viața aspră a țăranilor, fiind pictată într-o paletă de culori pământii, întunecate, pentru a sublinia legătura directă a acestora cu munca pământului.');
+                  info.setAttribute('visible', 'true');
+                  info.setAttribute('position', '-5 2.2 -6');
+                  info.setAttribute('rotation', '0 0 0');
+                ">
+      </a-sphere>
+
+      <!-- Hotspot Autoportret (MUTAT pe peretele din față) -->
+      <a-sphere position="1.5 1.8 6.9" radius="0.1" color="#8D6E63" 
+                animation="property: scale; to: 1.2 1.2 1.2; dir: alternate; dur: 1000; loop: true"
+                onclick="
+                  var info = document.querySelector('#info-box');
+                  document.querySelector('#info-text').setAttribute('value', 'Numeroasele sale autoportrete \n functioneaza ca un jurnal vizual \n intens, in care artistul foloseste \n tuse energice si culori vibrante \n pentru a-si explora propria \n identitate si starile emotionale \n fluctuante.');
+                  info.setAttribute('visible', 'true');
+                  info.setAttribute('position', '0 2.2 6');
+                  info.setAttribute('rotation', '0 0 0');
+                ">
+      </a-sphere>
+
+      <!-- ========== INFO BOX ========== -->
+      <a-entity id="info-box" position="0 2.5 -3" rotation="0 0 0" visible="false">
+        <!-- Fundal corectat (lățime mărită pentru a încăpea butonul X) -->
+        <a-plane width="3" height="1.5" color="#333" opacity="0.9"></a-plane>
+        <a-plane width="2.9" height="1.4" color="#F5E6C8" opacity="0.3" position="0 0 0.01"></a-plane>
+        <a-text id="info-text" value="" color="#FFF" align="center" width="2.5" position="0 0 0.02"></a-text>
+        <!-- Buton de închidere (poziționat corect în interiorul panoului) -->
+        <a-box position="1.3 0.6 0.02" width="0.3" height="0.15" depth="0.01" color="#AA4444" 
+               onclick="document.querySelector('#info-box').setAttribute('visible', 'false')">
+        </a-box>
+        <a-text value="X" color="#FFF" align="center" width="1.5" position="1.3 0.6 0.03"></a-text>
+      </a-entity>
+
+      <!-- ========== TAVAN ========== -->
+      <a-plane position="0 4 0" rotation="90 0 0" width="20" height="15" color="#F5F5F5" side="double"></a-plane>
+
+      <!-- Grinzi decorative tavan -->
+      <a-box position="0 3.9 0" width="20" height="0.1" depth="0.3" color="#5D4037"></a-box>
+      <a-box position="0 3.9 3" width="20" height="0.1" depth="0.3" color="#5D4037"></a-box>
+      <a-box position="0 3.9 -3" width="20" height="0.1" depth="0.3" color="#5D4037"></a-box>
+      <a-box position="0 3.9 6" width="20" height="0.1" depth="0.3" color="#5D4037"></a-box>
+      <a-box position="0 3.9 -6" width="20" height="0.1" depth="0.3" color="#5D4037"></a-box>
+
+    </a-scene>
+  </body>
+</html>

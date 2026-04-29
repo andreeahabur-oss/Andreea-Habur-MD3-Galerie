@@ -2,261 +2,609 @@
 <html>
   <head>
     <title>Galerie de arta</title>
+    
+    <!-- 1. LIBRARIA A-FRAME -->
     <script src="https://aframe.io/releases/1.4.0/aframe.min.js"></script>
+    
+    <!-- === INTEGRARE GEMINI API === -->
     <script>
+      const apiKey = ""; // Va fi injectat de mediu la runtime
+      let curentPaintingName = "";
+
+      // Funcție robustă pentru a apela Gemini cu Exponential Backoff
+      async function fetchGeminiWithRetry(prompt, retries = 5) {
+        const delays = [1000, 2000, 4000, 8000, 16000];
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
+        const payload = {
+          contents: [{ parts: [{ text: prompt }] }],
+          systemInstruction: { parts: [{ text: "Ești un curator de artă expert la o galerie digitală Van Gogh. Ești poetic, concis și captivant." }] }
+        };
+
+        for (let i = 0; i < retries; i++) {
+          try {
+            const response = await fetch(url, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(payload)
+            });
+            if (!response.ok) throw new Error(`Eroare HTTP: ${response.status}`);
+            const data = await response.json();
+            return data.candidates?.[0]?.content?.parts?.[0]?.text || "Nu am putut genera un răspuns.";
+          } catch (err) {
+            if (i === retries - 1) return "Conexiunea la IA a eșuat. Vă rugăm să încercați din nou.";
+            await new Promise(r => setTimeout(r, delays[i]));
+          }
+        }
+      }
+
+      // Feature 1: Cereală secrete despre tablou
+      async function cereSecretAI() {
+        if (!curentPaintingName) return;
+        var infoText = document.querySelector('#info-text');
+        infoText.setAttribute('value', "Curatorul AI analizeaza tabloul...\nAsteptati un moment ✨");
+        
+        const prompt = `Spune-mi o curiozitate foarte scurtă și interesantă, un detaliu tehnic sau un secret despre tabloul "${curentPaintingName}" de Vincent van Gogh. Fii foarte scurt (maxim 2-3 propoziții) și răspunde în limba română. Fără caractere de markdown precum asteriscuri.`;
+        
+        const raspuns = await fetchGeminiWithRetry(prompt);
+        let cleanResponse = raspuns.replace(/\*\*/g, '').replace(/\*/g, '');
+        infoText.setAttribute('value', `✨ Secret AI despre ${curentPaintingName}:\n\n${cleanResponse}`);
+      }
+
+      // Feature 2: Generare Poezie despre tablou
+      async function cerePoezieAI() {
+        if (!curentPaintingName) return;
+        var infoText = document.querySelector('#info-text');
+        infoText.setAttribute('value', "Gemini compune versuri...\nAsteptati un moment ✨");
+        
+        const prompt = `Scrie o poezie fix de 4 versuri inspirată vizual și emoțional de tabloul "${curentPaintingName}" de Vincent van Gogh. Limba: română. Fără caractere de markdown.`;
+        
+        const raspuns = await fetchGeminiWithRetry(prompt);
+        let cleanResponse = raspuns.replace(/\*\*/g, '').replace(/\*/g, '');
+        infoText.setAttribute('value', `✨ Poezie AI (${curentPaintingName}):\n\n${cleanResponse}`);
+      }
+
+      // Controlul Panoului de Info
+      function deschideInfo(numeTablou, descriere, pos, rot) {
+        curentPaintingName = numeTablou;
+        var info = document.querySelector('#info-box');
+        document.querySelector('#info-text').setAttribute('value', descriere);
+        info.setAttribute('visible', 'true');
+        info.setAttribute('position', pos);
+        info.setAttribute('rotation', rot);
+      }
+
+      function inchideInfo() {
+        document.querySelector('#info-box').setAttribute('visible', 'false');
+        curentPaintingName = "";
+      }
+    </script>
+
+    <!-- 2. SCRIPTUL PENTRU LIMITAREA CAMEREI -->
+    <script>
+      AFRAME.registerComponent('billboard', {
+        tick: function () {
+          var cameraEl = document.querySelector('a-camera');
+          if (!cameraEl) return;
+          var camPos = cameraEl.getAttribute('position');
+          var thisPos = this.el.getAttribute('position');
+          var dx = camPos.x - thisPos.x;
+          var dz = camPos.z - thisPos.z;
+          var angle = Math.atan2(dx, dz) * (180 / Math.PI);
+          this.el.setAttribute('rotation', '0 ' + angle + ' 0');
+        }
+      });
+
       AFRAME.registerComponent('limit-movement', {
+        init: function () {
+          this.lastPos = { 
+            x: this.el.getAttribute('position').x, 
+            z: this.el.getAttribute('position').z 
+          };
+        },
         tick: function () {
           var pos = this.el.getAttribute('position');
 
-          // 1. Limite perimetru exterior (pereții exteriori)
           if (pos.x < -8.5) pos.x = -8.5;
           if (pos.x > 8.5) pos.x = 8.5;
           if (pos.z < -6.5) pos.z = -6.5;
           if (pos.z > 6.5) pos.z = 6.5;
 
-          // 2. Blocare PERETE MIJLOC (a-box position="0 2 -2.5" depth="10")
-          if (Math.abs(pos.x) < 0.6 && pos.z < 2.8 && pos.z > -7.5) {
-            pos.x = (pos.x > 0) ? 0.6 : -0.6;
-          }
+          var wallMinX = -0.55, wallMaxX = 0.55;
+          var wallMinZ = -7.5,  wallMaxZ = 2.5;
 
+          if (pos.x > wallMinX && pos.x < wallMaxX && 
+              pos.z > wallMinZ && pos.z < wallMaxZ) {
+            if (this.lastPos.x <= wallMinX) {
+              pos.x = wallMinX;
+            } else if (this.lastPos.x >= wallMaxX) {
+              pos.x = wallMaxX;
+            } else if (this.lastPos.z <= wallMinZ) {
+              pos.z = wallMinZ;
+            } else if (this.lastPos.z >= wallMaxZ) {
+              pos.z = wallMaxZ;
+            } else {
+              var dMinX = Math.abs(pos.x - wallMinX);
+              var dMaxX = Math.abs(pos.x - wallMaxX);
+              var dMinZ = Math.abs(pos.z - wallMinZ);
+              var dMaxZ = Math.abs(pos.z - wallMaxZ);
+              var minD = Math.min(dMinX, dMaxX, dMinZ, dMaxZ);
+              if (minD === dMinX) pos.x = wallMinX;
+              else if (minD === dMaxX) pos.x = wallMaxX;
+              else if (minD === dMinZ) pos.z = wallMinZ;
+              else pos.z = wallMaxZ;
+            }
+          }
+          this.lastPos = { x: pos.x, z: pos.z };
           this.el.setAttribute('position', pos);
         }
       });
     </script>
+
+    <!-- 3. SCRIPTUL PENTRU VIZITATOR (CALUGAR) -->
+    <script>
+      AFRAME.registerComponent('vizitator', {
+        init: async function () {
+          this.traseu = [
+            { x: -8, z: 2, rot: -90, wait: true },     
+            { x: -8, z: -1.5, rot: -90, wait: true },  
+            { x: -5, z: -5.5, rot: 180, wait: true },  
+            { x: -5, z: 5.5, rot: 0, wait: true },     
+            { x: 5, z: 5.5, rot: 0, wait: true },      
+            { x: 8, z: 2, rot: 90, wait: true },       
+            { x: 8, z: -1.5, rot: 90, wait: true },    
+            { x: 5, z: -5.5, rot: 180, wait: true },   
+            { x: 5, z: 3.5, rot: 180, wait: false },   
+            { x: -5, z: 3.5, rot: 180, wait: false }   
+          ];
+          
+          // Replicile initiale in caz de fallback
+          this.mesaje = [
+            "Ce capodoperă! Priviti cum lumina dansează pe pânză!",
+            "Fiecare tablou spune o poveste despre lupta interioară a lui Vincent.",
+            "Observati tușele energice, specifice stilului post-impresionist."
+          ];
+          
+          this.indexCurent = 0;
+          this.el.setAttribute('position', '-5 0 2');
+          this.el.setAttribute('rotation', '0 0 0');
+          
+          this.speechBubble = document.createElement('a-entity');
+          this.speechBubble.setAttribute('id', 'calugar-speech');
+          this.speechBubble.setAttribute('position', '-5 2.3 2');
+          this.speechBubble.setAttribute('billboard', '');
+          this.speechBubble.innerHTML = `
+            <a-plane width="2.8" height="0.8" color="#FFF" opacity="0.95" side="double" position="0 0 0">
+              <a-text id="calugar-text" value="Analizez capodoperele..." align="center" width="2.4" color="#222" position="0 0 0.01" wrap-count="35"></a-text>
+            </a-plane>
+            <a-cone color="#FFF" opacity="0.95" radius-bottom="0.1" radius-top="0" height="0.2" position="0 -0.5 0" rotation="0 0 180"></a-cone>
+          `;
+          this.speechBubble.setAttribute('visible', false);
+          this.el.sceneEl.appendChild(this.speechBubble);
+          this.speechText = this.speechBubble.querySelector('#calugar-text');
+          
+          // Feature 3: Gemini Populeaza dinamic gandurile vizitatorului la inceput!
+          this.incarcaRepliciAI();
+
+          setTimeout(() => { this.mergiLaUrmatorul(); }, 3000);
+        },
+
+        incarcaRepliciAI: async function() {
+          const prompt = "Scrie 5 replici scurte (maxim o frază) pe care le-ar spune cu voce tare un pasionat de artă în timp ce privește fascinat picturile lui Van Gogh într-o galerie. Oferă-le ca o listă simplă cu câte o replică pe linie. Fără bullet points.";
+          const raspuns = await fetchGeminiWithRetry(prompt, 3); // Mai puține retry-uri pentru background task
+          if(raspuns && !raspuns.startsWith("Conexiunea")) {
+            const replici = raspuns.split('\n').map(l => l.replace(/^[-*0-9.]+\s*/, '').trim()).filter(l => l.length > 10);
+            if(replici.length > 0) {
+               this.mesaje = replici;
+            }
+          }
+        },
+        
+        tick: function() {
+          if(this.speechBubble && this.speechBubble.getAttribute('visible')) {
+            var pos = this.el.getAttribute('position');
+            this.speechBubble.setAttribute('position', pos.x + ' 2.3 ' + pos.z);
+          }
+        },
+        
+        showSpeech: function() {
+          var msg = this.mesaje[Math.floor(Math.random() * this.mesaje.length)];
+          this.speechText.setAttribute('value', msg);
+          this.speechBubble.setAttribute('visible', true);
+          var pos = this.el.getAttribute('position');
+          this.speechBubble.setAttribute('position', pos.x + ' 2.3 ' + pos.z);
+        },
+        
+        hideSpeech: function() {
+          this.speechBubble.setAttribute('visible', false);
+        },
+        
+        mergiLaUrmatorul: function () {
+          let end = this.traseu[this.indexCurent];
+          let pos = this.el.getAttribute('position');
+          
+          let dx = end.x - pos.x;
+          let dz = end.z - pos.z;
+          let unghiDeMers = Math.atan2(dx, dz) * (180 / Math.PI);
+          let distanta = Math.sqrt(dx*dx + dz*dz);
+          let timpMers = Math.floor(distanta * 1500);
+          
+          this.hideSpeech();
+          
+          this.el.setAttribute('animation__intoarcere', `property: rotation; to: 0 ${unghiDeMers} 0; dur: 800; easing: easeInOutQuad`);
+          
+          setTimeout(() => {
+            this.el.setAttribute('animation__mers', `property: position; to: ${end.x} 0 ${end.z}; dur: ${timpMers}; easing: linear`);
+            
+            setTimeout(() => {
+              if (end.wait !== false) {
+                this.el.setAttribute('animation__intoarcere2', `property: rotation; to: 0 ${end.rot} 0; dur: 800; easing: easeInOutQuad`);
+                setTimeout(() => { this.showSpeech(); }, 800);
+                setTimeout(() => {
+                  this.hideSpeech();
+                  this.indexCurent = (this.indexCurent + 1) % this.traseu.length;
+                  this.mergiLaUrmatorul();
+                }, 4000);
+              } else {
+                this.indexCurent = (this.indexCurent + 1) % this.traseu.length;
+                this.mergiLaUrmatorul();
+              }
+            }, timpMers + 50);
+          }, 850);
+        }
+      });
+    </script>
+
+    <!-- 4. SCRIPTUL PENTRU PISICA -->
+    <script>
+      AFRAME.registerComponent('pisica', {
+        init: function () {
+          this.traseu = [
+            { x: -3, z: 4, rot: 0, wait: true },
+            { x: 3, z: 4, rot: 0, wait: true },
+            { x: 7, z: 0, rot: 90, wait: true },
+            { x: 3, z: -4, rot: 180, wait: true },
+            { x: -3, z: -4, rot: 180, wait: true },
+            { x: -7, z: 0, rot: -90, wait: true },
+            { x: 0, z: 3.5, rot: 180, wait: false }
+          ];
+          
+          this.indexCurent = 0;
+          this.el.setAttribute('position', '0 0 0');
+          this.el.setAttribute('rotation', '0 0 0');
+          this.el.setAttribute('scale', '1 1 1');
+          
+          this.poseEl = this.el.querySelector('#pisica-pose');
+          setTimeout(() => { this.mergiLaUrmatorul(); }, 5000);
+        },
+        
+        mergiLaUrmatorul: function () {
+          let end = this.traseu[this.indexCurent];
+          let pos = this.el.getAttribute('position');
+          let dx = end.x - pos.x;
+          let dz = end.z - pos.z;
+          let unghiDeMers = Math.atan2(dx, dz) * (180 / Math.PI);
+          let distanta = Math.sqrt(dx*dx + dz*dz);
+          let timpMers = Math.floor(distanta * 2000);
+          
+          if (this.poseEl) {
+            this.poseEl.removeAttribute('animation__sit');
+            this.poseEl.removeAttribute('animation__sitpos');
+            this.poseEl.setAttribute('rotation', '0 0 0');
+            this.poseEl.setAttribute('position', '0 0 0');
+          }
+          
+          this.el.setAttribute('animation__rot', `property: rotation; to: 0 ${unghiDeMers} 0; dur: 600; easing: easeInOutQuad`);
+          
+          setTimeout(() => {
+            this.el.setAttribute('animation__mers', `property: position; to: ${end.x} 0 ${end.z}; dur: ${timpMers}; easing: linear`);
+            
+            setTimeout(() => {
+              if (end.wait !== false) {
+                this.el.setAttribute('animation__rot2', `property: rotation; to: 0 ${end.rot} 0; dur: 600; easing: easeInOutQuad`);
+                setTimeout(() => {
+                  if (this.poseEl) {
+                    this.poseEl.setAttribute('animation__sit', 'property: rotation; to: -35 0 0; dur: 400; easing: easeInOutQuad');
+                    this.poseEl.setAttribute('animation__sitpos', 'property: position; to: 0 0.06 0; dur: 400; easing: easeInOutQuad');
+                  }
+                  setTimeout(() => {
+                    this.indexCurent = (this.indexCurent + 1) % this.traseu.length;
+                    this.mergiLaUrmatorul();
+                  }, 2500);
+                }, 600);
+              } else {
+                this.indexCurent = (this.indexCurent + 1) % this.traseu.length;
+                this.mergiLaUrmatorul();
+              }
+            }, timpMers + 50);
+          }, 650);
+        }
+      });
+    </script>
+
   </head>
   <body>
     <a-scene>
       
-      <!-- LUMINI (esențiale pentru vizibilitate) -->
+      <!-- LUMINI -->
       <a-entity light="type: ambient; color: #BBB; intensity: 0.6"></a-entity>
       <a-entity light="type: directional; color: #FFF; intensity: 0.5" position="-2 5 3"></a-entity>
       <a-entity light="type: point; color: #FFE0B2; intensity: 0.4; distance: 10" position="0 3.5 0"></a-entity>
 
-      <!-- Cer -->
+      <!-- Cer si Podea -->
       <a-sky color="#000814"></a-sky>
+      <a-plane position="0 0 0" rotation="-90 0 0" width="20" height="15" src="https://raw.githubusercontent.com/aframevr/sample-assets/master/assets/images/wood/hardwood2_diffuse.jpg" repeat="10 10"></a-plane>
 
-      <!-- Cameră -->
+      <!-- Camera Jucatorului -->
       <a-camera position="-5 1.6 5" limit-movement>
         <a-cursor color="yellow"></a-cursor>
       </a-camera>
 
-      <!-- Podea -->
-      <a-plane position="0 0 0" rotation="-90 0 0" width="20" height="15" 
-               src="https://raw.githubusercontent.com/aframevr/sample-assets/master/assets/images/wood/hardwood2_diffuse.jpg" 
-               repeat="10 10">
-      </a-plane>
-
-      <!-- Pereți exteriori -->
+      <!-- Pereti Exteriori si Mijloc -->
       <a-box position="0 2 -7.5" width="20" height="4" depth="0.5" color="#D2C4A7"></a-box>
       <a-box position="0 2 7.5" width="20" height="4" depth="0.5" color="#D2C4A7"></a-box>
       <a-box position="-10 2 0" width="0.5" height="4" depth="15" color="#D2C4A7"></a-box>
       <a-box position="10 2 0" width="0.5" height="4" depth="15" color="#D2C4A7"></a-box>
-
-      <!-- Perete mijloc -->
       <a-box position="0 2 -2.5" width="0.5" height="4" depth="10" color="#D2C4A7"></a-box>
 
+      <!-- ========== BECURI ========== -->
+      <a-entity position="-9.5 3.7 4"><a-cylinder height="0.25" radius="0.02" color="#444" position="0 0.125 0"></a-cylinder><a-sphere radius="0.1" color="#FFF" emissive="#FFEB3B" emissive-intensity="0.8" position="0 -0.05 0"></a-sphere><a-light type="point" intensity="0.5" distance="5" color="#FFF8E1" position="0 -0.2 0"></a-light></a-entity>
+      <a-entity position="-9.5 3.7 -3.5"><a-cylinder height="0.25" radius="0.02" color="#444" position="0 0.125 0"></a-cylinder><a-sphere radius="0.1" color="#FFF" emissive="#FFEB3B" emissive-intensity="0.8" position="0 -0.05 0"></a-sphere><a-light type="point" intensity="0.5" distance="5" color="#FFF8E1" position="0 -0.2 0"></a-light></a-entity>
+      <a-entity position="9.5 3.7 4"><a-cylinder height="0.25" radius="0.02" color="#444" position="0 0.125 0"></a-cylinder><a-sphere radius="0.1" color="#FFF" emissive="#FFEB3B" emissive-intensity="0.8" position="0 -0.05 0"></a-sphere><a-light type="point" intensity="0.5" distance="5" color="#FFF8E1" position="0 -0.2 0"></a-light></a-entity>
+      <a-entity position="9.5 3.7 -3.5"><a-cylinder height="0.25" radius="0.02" color="#444" position="0 0.125 0"></a-cylinder><a-sphere radius="0.1" color="#FFF" emissive="#FFEB3B" emissive-intensity="0.8" position="0 -0.05 0"></a-sphere><a-light type="point" intensity="0.5" distance="5" color="#FFF8E1" position="0 -0.2 0"></a-light></a-entity>
+      <a-entity position="-7.5 3.7 6.8"><a-cylinder height="0.25" radius="0.02" color="#444" position="0 0.125 0"></a-cylinder><a-sphere radius="0.1" color="#FFF" emissive="#FFEB3B" emissive-intensity="0.8" position="0 -0.05 0"></a-sphere><a-light type="point" intensity="0.5" distance="5" color="#FFF8E1" position="0 -0.2 0"></a-light></a-entity>
+      <a-entity position="-2.5 3.7 6.8"><a-cylinder height="0.25" radius="0.02" color="#444" position="0 0.125 0"></a-cylinder><a-sphere radius="0.1" color="#FFF" emissive="#FFEB3B" emissive-intensity="0.8" position="0 -0.05 0"></a-sphere><a-light type="point" intensity="0.5" distance="5" color="#FFF8E1" position="0 -0.2 0"></a-light></a-entity>
+      <a-entity position="2.5 3.7 6.8"><a-cylinder height="0.25" radius="0.02" color="#444" position="0 0.125 0"></a-cylinder><a-sphere radius="0.1" color="#FFF" emissive="#FFEB3B" emissive-intensity="0.8" position="0 -0.05 0"></a-sphere><a-light type="point" intensity="0.5" distance="5" color="#FFF8E1" position="0 -0.2 0"></a-light></a-entity>
+      <a-entity position="7.5 3.7 6.8"><a-cylinder height="0.25" radius="0.02" color="#444" position="0 0.125 0"></a-cylinder><a-sphere radius="0.1" color="#FFF" emissive="#FFEB3B" emissive-intensity="0.8" position="0 -0.05 0"></a-sphere><a-light type="point" intensity="0.5" distance="5" color="#FFF8E1" position="0 -0.2 0"></a-light></a-entity>
+      <a-entity position="-7.5 3.7 -6.8"><a-cylinder height="0.25" radius="0.02" color="#444" position="0 0.125 0"></a-cylinder><a-sphere radius="0.1" color="#FFF" emissive="#FFEB3B" emissive-intensity="0.8" position="0 -0.05 0"></a-sphere><a-light type="point" intensity="0.5" distance="5" color="#FFF8E1" position="0 -0.2 0"></a-light></a-entity>
+      <a-entity position="-2.5 3.7 -6.8"><a-cylinder height="0.25" radius="0.02" color="#444" position="0 0.125 0"></a-cylinder><a-sphere radius="0.1" color="#FFF" emissive="#FFEB3B" emissive-intensity="0.8" position="0 -0.05 0"></a-sphere><a-light type="point" intensity="0.5" distance="5" color="#FFF8E1" position="0 -0.2 0"></a-light></a-entity>
+      <a-entity position="2.5 3.7 -6.8"><a-cylinder height="0.25" radius="0.02" color="#444" position="0 0.125 0"></a-cylinder><a-sphere radius="0.1" color="#FFF" emissive="#FFEB3B" emissive-intensity="0.8" position="0 -0.05 0"></a-sphere><a-light type="point" intensity="0.5" distance="5" color="#FFF8E1" position="0 -0.2 0"></a-light></a-entity>
+      <a-entity position="7.5 3.7 -6.8"><a-cylinder height="0.25" radius="0.02" color="#444" position="0 0.125 0"></a-cylinder><a-sphere radius="0.1" color="#FFF" emissive="#FFEB3B" emissive-intensity="0.8" position="0 -0.05 0"></a-sphere><a-light type="point" intensity="0.5" distance="5" color="#FFF8E1" position="0 -0.2 0"></a-light></a-entity>
+
       <!-- ========== PERETELE STÂNGA ========== -->
-      
-      <!-- TABLOU 1 - Sunflowers -->
-      <a-box position="-9.6 2 2" width="3" height="2.2" depth="0.1" rotation="0 90 0" src="TABLOU NR 1.jpg" onclick="alert('Ai dat click pe Sunflowers!')"></a-box>
-      <!-- Rama tablou 1 -->
+      <a-box position="-9.6 2 2" width="3" height="2.2" depth="0.1" rotation="0 90 0" src="TABLOU NR 1.jpg"></a-box>
       <a-box position="-9.7 0.85 2" width="3.2" height="0.1" depth="0.2" rotation="0 90 0" color="#5D4037"></a-box>
       <a-box position="-9.7 3.15 2" width="3.2" height="0.1" depth="0.2" rotation="0 90 0" color="#5D4037"></a-box>
       <a-box position="-9.7 2 3.55" width="0.1" height="2.4" depth="0.2" rotation="0 90 0" color="#5D4037"></a-box>
       <a-box position="-9.7 2 0.45" width="0.1" height="2.4" depth="0.2" rotation="0 90 0" color="#5D4037"></a-box>
-      <!-- Eticheta tablou 1 -->
       <a-box position="-9.65 0.5 2" width="0.8" height="0.3" depth="0.05" rotation="0 90 0" color="#DDDDDD"></a-box>
       <a-text value="Sunflower" color="black" align="center" width="1.5" position="-9.62 0.5 2" rotation="0 90 0"></a-text>
 
-      <!-- TABLOU 2 - Starry Night -->
       <a-box position="-9.6 2 -1.5" width="3" height="2.2" depth="0.1" rotation="0 90 0" src="TABLOU NR 2.jpg"></a-box>
-      <!-- Rama tablou 2 -->
       <a-box position="-9.7 0.85 -1.5" width="3.2" height="0.1" depth="0.2" rotation="0 90 0" color="#5D4037"></a-box>
       <a-box position="-9.7 3.15 -1.5" width="3.2" height="0.1" depth="0.2" rotation="0 90 0" color="#5D4037"></a-box>
       <a-box position="-9.7 2 0.05" width="0.1" height="2.4" depth="0.2" rotation="0 90 0" color="#5D4037"></a-box>
       <a-box position="-9.7 2 -3.05" width="0.1" height="2.4" depth="0.2" rotation="0 90 0" color="#5D4037"></a-box>
-      <!-- Eticheta tablou 2 -->
       <a-box position="-9.65 0.5 -1.5" width="0.8" height="0.3" depth="0.05" rotation="0 90 0" color="#DDDDDD"></a-box>
       <a-text value="Starry Night" color="black" align="center" width="1.5" position="-9.59 0.5 -1.5" rotation="0 90 0"></a-text>
 
-      <!-- Felinare stânga -->
-      <a-entity position="-9.5 2.5 4">
-        <a-box position="0.15 0 0" width="0.3" height="0.05" depth="0.05" color="#8B7355"></a-box>
-        <a-box position="0 0.2 0" width="0.05" height="0.4" depth="0.05" color="#8B7355"></a-box>
-        <a-box position="0 -0.15 0" width="0.5" height="0.4" depth="0.3" color="#D4A017" opacity="0.8"></a-box>
-        <a-sphere position="0 -0.15 0" radius="0.12" color="#FFD700" opacity="0.6"></a-sphere>
-      </a-entity>
-      <a-entity position="-9.5 2.5 -3.5">
-        <a-box position="0.15 0 0" width="0.3" height="0.05" depth="0.05" color="#8B7355"></a-box>
-        <a-box position="0 0.2 0" width="0.05" height="0.4" depth="0.05" color="#8B7355"></a-box>
-        <a-box position="0 -0.15 0" width="0.5" height="0.4" depth="0.3" color="#D4A017" opacity="0.8"></a-box>
-        <a-sphere position="0 -0.15 0" radius="0.12" color="#FFD700" opacity="0.6"></a-sphere>
-      </a-entity>
-
       <!-- ========== PERETELE DREAPTA ========== -->
-
-      <!-- TABLOU 3 - Irises -->
       <a-box position="9.6 2 2" width="3" height="2.2" depth="0.1" rotation="0 -90 0" src="TABLOU NR 3.jpg"></a-box>
-      <!-- Rama tablou 3 -->
       <a-box position="9.7 0.85 2" width="3.2" height="0.1" depth="0.2" rotation="0 -90 0" color="#5D4037"></a-box>
       <a-box position="9.7 3.15 2" width="3.2" height="0.1" depth="0.2" rotation="0 -90 0" color="#5D4037"></a-box>
       <a-box position="9.7 2 3.55" width="0.1" height="2.4" depth="0.2" rotation="0 -90 0" color="#5D4037"></a-box>
       <a-box position="9.7 2 0.45" width="0.1" height="2.4" depth="0.2" rotation="0 -90 0" color="#5D4037"></a-box>
-      <!-- Eticheta tablou 3 -->
       <a-box position="9.65 0.5 2" width="0.8" height="0.3" depth="0.05" rotation="0 -90 0" color="#DDDDDD"></a-box>
       <a-text value="Irises" color="black" align="center" width="1.5" position="9.59 0.5 2" rotation="0 -90 0"></a-text>
 
-      <!-- TABLOU 4 - Almond Blossom -->
       <a-box position="9.6 2 -1.5" width="3" height="2.2" depth="0.1" rotation="0 -90 0" src="TABLOU NR 4.jpg"></a-box>
-      <!-- Rama tablou 4 -->
       <a-box position="9.7 0.85 -1.5" width="3.2" height="0.1" depth="0.2" rotation="0 -90 0" color="#5D4037"></a-box>
       <a-box position="9.7 3.15 -1.5" width="3.2" height="0.1" depth="0.2" rotation="0 -90 0" color="#5D4037"></a-box>
       <a-box position="9.7 2 0.05" width="0.1" height="2.4" depth="0.2" rotation="0 -90 0" color="#5D4037"></a-box>
       <a-box position="9.7 2 -3.05" width="0.1" height="2.4" depth="0.2" rotation="0 -90 0" color="#5D4037"></a-box>
-      <!-- Eticheta tablou 4 -->
       <a-box position="9.65 0.5 -1.5" width="0.8" height="0.3" depth="0.05" rotation="0 -90 0" color="#DDDDDD"></a-box>
       <a-text value="Almond Blossom" color="black" align="center" width="1.5" position="9.59 0.5 -1.5" rotation="0 -90 0"></a-text>
 
-      <!-- Felinare dreapta -->
-      <a-entity position="9.5 2.5 4">
-        <a-box position="-0.15 0 0" width="0.3" height="0.05" depth="0.05" color="#8B7355"></a-box>
-        <a-box position="0 0.2 0" width="0.05" height="0.4" depth="0.05" color="#8B7355"></a-box>
-        <a-box position="0 -0.15 0" width="0.5" height="0.4" depth="0.3" color="#D4A017" opacity="0.8"></a-box>
-        <a-sphere position="0 -0.15 0" radius="0.12" color="#FFD700" opacity="0.6"></a-sphere>
-      </a-entity>
-      <a-entity position="9.5 2.5 -3.5">
-        <a-box position="-0.15 0 0" width="0.3" height="0.05" depth="0.05" color="#8B7355"></a-box>
-        <a-box position="0 0.2 0" width="0.05" height="0.4" depth="0.05" color="#8B7355"></a-box>
-        <a-box position="0 -0.15 0" width="0.5" height="0.4" depth="0.3" color="#D4A017" opacity="0.8"></a-box>
-        <a-sphere position="0 -0.15 0" radius="0.12" color="#FFD700" opacity="0.6"></a-sphere>
-      </a-entity>
-
       <!-- ========== PERETELE DIN FAȚĂ ========== -->
-      
-           <!-- ========== PERETELE DIN FAȚĂ ========== -->
-      
-      <!-- TABLOU 5 - Autoportret -->
+      <a-box position="-5 2 7.15" width="3" height="2.2" depth="0.1" rotation="0 0 0" src="TABLOU NR 8.jpg"></a-box>
+      <a-box position="-5 0.85 7.2" width="3.2" height="0.1" depth="0.2" rotation="0 0 0" color="#5D4037"></a-box>
+      <a-box position="-5 3.15 7.2" width="3.2" height="0.1" depth="0.2" rotation="0 0 0" color="#5D4037"></a-box>
+      <a-box position="-3.45 2 7.2" width="0.1" height="2.4" depth="0.2" rotation="0 0 0" color="#5D4037"></a-box>
+      <a-box position="-6.55 2 7.2" width="0.1" height="2.4" depth="0.2" rotation="0 0 0" color="#5D4037"></a-box>
+      <a-box position="-5 0.5 7.1" width="0.8" height="0.3" depth="0.05" rotation="0 180 0" color="#DDDDDD"></a-box>
+      <a-text value="Cafe Terrace" color="black" align="center" width="1.5" position="-5 0.50 7.05" rotation="0 180 0"></a-text>
+
       <a-box position="0 2 7.15" width="3" height="2.2" depth="0.1" rotation="0 0 0" src="TABLOU NR 5.jpg"></a-box>
-      <!-- Rama tablou 5 -->
       <a-box position="0 0.85 7.2" width="3.2" height="0.1" depth="0.2" rotation="0 0 0" color="#5D4037"></a-box>
       <a-box position="0 3.15 7.2" width="3.2" height="0.1" depth="0.2" rotation="0 0 0" color="#5D4037"></a-box>
       <a-box position="1.55 2 7.2" width="0.1" height="2.4" depth="0.2" rotation="0 0 0" color="#5D4037"></a-box>
       <a-box position="-1.55 2 7.2" width="0.1" height="2.4" depth="0.2" rotation="0 0 0" color="#5D4037"></a-box>
-      
-      <!-- Eticheta tablou 5 (CORECTAT: rotation 0 0 0 ca să privească spre interior) -->
-      <a-box position="0 0.5 7.08" width="0.8" height="0.3" depth="0.05" rotation="0 0 0" color="#DDDDDD"></a-box>
-      <a-text value="Autoportret" color="black" align="center" width="1.5" position="0 0.5 7.06" rotation="0 0 0"></a-text>
+      <a-box position="0 0.5 7.1" width="0.8" height="0.3" depth="0.05" rotation="0 180 0" color="#DDDDDD"></a-box>
+      <a-text value="Autoportret" color="black" align="center" width="1.5" position="0 0.50 7.05" rotation="0 180 0"></a-text>
+
+      <a-box position="5 2 7.15" width="3" height="2.2" depth="0.1" rotation="0 0 0" src="TABLOU NR 7.jpg"></a-box>
+      <a-box position="5 0.85 7.2" width="3.2" height="0.1" depth="0.2" rotation="0 0 0" color="#5D4037"></a-box>
+      <a-box position="5 3.15 7.2" width="3.2" height="0.1" depth="0.2" rotation="0 0 0" color="#5D4037"></a-box>
+      <a-box position="6.55 2 7.2" width="0.1" height="2.4" depth="0.2" rotation="0 0 0" color="#5D4037"></a-box>
+      <a-box position="3.45 2 7.2" width="0.1" height="2.4" depth="0.2" rotation="0 0 0" color="#5D4037"></a-box>
+      <a-box position="5 0.5 7.1" width="0.8" height="0.3" depth="0.05" rotation="0 180 0" color="#DDDDDD"></a-box>
+      <a-text value="The Bedroom" color="black" align="center" width="1.5" position="5 0.50 7.05" rotation="0 180 0"></a-text>
 
       <!-- ========== PERETELE DIN SPATE ========== -->
-
-      <!-- TABLOU 6 - Potato Eaters -->
       <a-box position="-5 2 -7.15" width="3" height="2.2" depth="0.1" rotation="0 0 0" src="TABLOU NR 6.jpg"></a-box>
-      <!-- Rama tablou 6 -->
       <a-box position="-5 0.85 -7.2" width="3.2" height="0.1" depth="0.2" rotation="0 0 0" color="#5D4037"></a-box>
       <a-box position="-5 3.15 -7.2" width="3.2" height="0.1" depth="0.2" rotation="0 0 0" color="#5D4037"></a-box>
       <a-box position="-3.45 2 -7.2" width="0.1" height="2.4" depth="0.2" rotation="0 0 0" color="#5D4037"></a-box>
       <a-box position="-6.55 2 -7.2" width="0.1" height="2.4" depth="0.2" rotation="0 0 0" color="#5D4037"></a-box>
+      <a-box position="-5 0.5 -7.1" width="0.8" height="0.3" depth="0.05" rotation="0 0 0" color="#DDDDDD"></a-box>
+      <a-text value="Potato Eaters" color="black" align="center" width="1.5" position="-5 0.50 -7.02" rotation="0 0 0"></a-text>
+
+      <a-box position="5 2 -7.15" width="3" height="2.2" depth="0.1" rotation="0 0 0" src="TABLOU NR 10.jpg"></a-box>
+      <a-box position="5 0.85 -7.2" width="3.2" height="0.1" depth="0.2" rotation="0 0 0" color="#5D4037"></a-box>
+      <a-box position="5 3.15 -7.2" width="3.2" height="0.1" depth="0.2" rotation="0 0 0" color="#5D4037"></a-box>
+      <a-box position="6.55 2 -7.2" width="0.1" height="2.4" depth="0.2" rotation="0 0 0" color="#5D4037"></a-box>
+      <a-box position="3.45 2 -7.2" width="0.1" height="2.4" depth="0.2" rotation="0 0 0" color="#5D4037"></a-box>
+      <a-box position="5 0.5 -7.1" width="0.8" height="0.3" depth="0.05" rotation="0 0 0" color="#DDDDDD"></a-box>
+      <a-text value="Wheatfield" color="black" align="center" width="1.5" position="5 0.50 -7.05" rotation="0 0 0"></a-text>
+
+      <!-- ========== HOTSPOT-URI INTERACTIVE (ACTUALIZATE) ========== -->
+      <a-sphere position="-9.4 1.8 -3.5" radius="0.1" color="#4A90E2" animation="property: scale; to: 1.2 1.2 1.2; dir: alternate; dur: 1000; loop: true" 
+        onclick="deschideInfo('Noapte înstelată', 'Van Gogh a pictat aceasta scena din chilia sa din azilul Saint-Paul-de-Mausole.', '-7 2.5 -1.5', '0 90 0')"></a-sphere>
       
-      <!-- Eticheta tablou 6 (CORECTAT: rotation 0 180 0 ca să privească spre interior) -->
-      <a-box position="-5 0.5 -7.08" width="0.8" height="0.3" depth="0.05" rotation="0 180 0" color="#DDDDDD"></a-box>
-      <a-text value="Potato Eaters" color="black" align="center" width="1.5" position="-5 0.5 -7.06" rotation="0 180 0"></a-text>
+      <a-sphere position="-9.4 1.8 4.0" radius="0.1" color="#F39C12" animation="property: scale; to: 1.2 1.2 1.2; dir: alternate; dur: 1000; loop: true" 
+        onclick="deschideInfo('Floarea Soarelui', 'Van Gogh a pictat aceasta serie pentru a decora camera prietenului sau, Paul Gauguin, in Arles.', '-7 2.5 2', '0 90 0')"></a-sphere>
+      
+      <a-sphere position="9.4 1.8 4.0" radius="0.1" color="#27AE60" animation="property: scale; to: 1.2 1.2 1.2; dir: alternate; dur: 1000; loop: true" 
+        onclick="deschideInfo('Iriși', 'Irises a fost pictat in gradina azilului din Saint-Remy, cu doar un an inainte de moartea sa.', '8 2.2 2', '0 -90 0')"></a-sphere>
+      
+      <a-sphere position="9.4 1.8 -3.5" radius="0.1" color="#85C1E9" animation="property: scale; to: 1.2 1.2 1.2; dir: alternate; dur: 1000; loop: true" 
+        onclick="deschideInfo('Ramuri de migdal inflorit', 'A fost un cadou pentru fratele sau, Theo, la nasterea fiului acestuia.', '8 2.2 -1.5', '0 -90 0')"></a-sphere>
+      
+      <a-sphere position="-3.2 1.8 7.0" radius="0.1" color="#9B59B6" animation="property: scale; to: 1.2 1.2 1.2; dir: alternate; dur: 1000; loop: true" 
+        onclick="deschideInfo('Terasa Cafenelei Noaptea', 'Faimoasa scena surprinde atmosfera vibranta dintr-o cafenea franceza, fara a folosi deloc culoarea negru.', '-5 2.2 5.5', '0 180 0')"></a-sphere>
+      
+      <a-sphere position="1.8 1.8 7.0" radius="0.1" color="#8D6E63" animation="property: scale; to: 1.2 1.2 1.2; dir: alternate; dur: 1000; loop: true" 
+        onclick="deschideInfo('Autoportret', 'Autoportretele sale functioneaza ca un jurnal vizual intens, folosind tuse energice pentru a-si explora starile emotionale.', '0 2.2 5.5', '0 180 0')"></a-sphere>
+      
+      <a-sphere position="6.8 1.8 7.0" radius="0.1" color="#F1C40F" animation="property: scale; to: 1.2 1.2 1.2; dir: alternate; dur: 1000; loop: true" 
+        onclick="deschideInfo('Camera din Arles', 'Aceasta camera din Casa Galbena reflecta dorinta lui Van Gogh de a gasi liniste si ordine, culorile vii sugerand calm.', '5 2.2 5.5', '0 180 0')"></a-sphere>
+      
+      <a-sphere position="-3.0 1.8 -7.0" radius="0.1" color="#E67E22" animation="property: scale; to: 1.2 1.2 1.2; dir: alternate; dur: 1000; loop: true" 
+        onclick="deschideInfo('Mâncătorii de cartofi', 'Opera timpurie ce reflecta respectul profund al lui Van Gogh pentru viata aspra a taranilor, pictata in culori pamantii.', '-5 2.2 -5.5', '0 0 0')"></a-sphere>
+      
+      <a-sphere position="6.8 1.8 -7.0" radius="0.1" color="#34495E" animation="property: scale; to: 1.2 1.2 1.2; dir: alternate; dur: 1000; loop: true" 
+        onclick="deschideInfo('Lan de grâu cu ciori', 'Considerata una dintre ultimele sale opere, acest lan agitat de vant exprima o viziune profunda si zbuciumata.', '5 2.2 -5.5', '0 0 0')"></a-sphere>
 
-      <!-- ========== HOTSPOT-URI INTERACTIVE ========== -->
 
-      <!-- Hotspot Starry Night -->
-      <a-sphere position="-9.4 1.8 -3.5" radius="0.1" color="#4A90E2" 
-                animation="property: scale; to: 1.2 1.2 1.2; dir: alternate; dur: 1000; loop: true"
-                onclick="
-                  var info = document.querySelector('#info-box');
-                  document.querySelector('#info-text').setAttribute('value', 'Van Gogh a pictat aceasta scena \n din chilia sa din azilul \n Saint-Paul-de-Mausole.');
-                  info.setAttribute('visible', 'true');
-                  info.setAttribute('position', '-7 2.5 -1.5');
-                  info.setAttribute('rotation', '0 90 0');
-                ">
-      </a-sphere>
-
-      <!-- Hotspot Sunflowers -->
-      <a-sphere position="-9.4 1.8 4.0" radius="0.1" color="#F39C12" 
-                animation="property: scale; to: 1.2 1.2 1.2; dir: alternate; dur: 1000; loop: true"
-                onclick="
-                  var info = document.querySelector('#info-box');
-                  document.querySelector('#info-text').setAttribute('value', 'Van Gogh a pictat aceasta serie \n pentru a decora camera prietenului sau, \n Paul Gauguin, in Arles.');
-                  info.setAttribute('visible', 'true');
-                  info.setAttribute('position', '-7 2.5 2'); 
-                  info.setAttribute('rotation', '0 90 0');
-                ">
-      </a-sphere>
-
-      <!-- Hotspot Irises -->
-      <a-sphere position="9.4 1.8 4.0" radius="0.1" color="#27AE60" 
-                animation="property: scale; to: 1.2 1.2 1.2; dir: alternate; dur: 1000; loop: true"
-                onclick="
-                  var info = document.querySelector('#info-box');
-                  document.querySelector('#info-text').setAttribute('value', 'Irises a fost pictat in gradina \n azilului din Saint-Remy, cu doar \n un an inainte de moartea sa.');
-                  info.setAttribute('visible', 'true');
-                  info.setAttribute('position', '8 2.2 2');
-                  info.setAttribute('rotation', '0 -90 0');
-                ">
-      </a-sphere>
-
-      <!-- Hotspot Almond Blossom -->
-      <a-sphere position="9.4 1.8 -3.5" radius="0.1" color="#85C1E9" 
-                animation="property: scale; to: 1.2 1.2 1.2; dir: alternate; dur: 1000; loop: true"
-                onclick="
-                  var info = document.querySelector('#info-box');
-                  document.querySelector('#info-text').setAttribute('value', 'Ramuri de migdal inflorit a fost \n un cadou pentru fratele sau, Theo, \n la nasterea fiului acestuia.');
-                  info.setAttribute('visible', 'true');
-                  info.setAttribute('position', '8 2.2 -1.5');
-                  info.setAttribute('rotation', '0 -90 0');
-                ">
-      </a-sphere>
-
-      <!-- Hotspot Potato Eaters -->
-      <a-sphere position="-3.0 1.8 -7.0" radius="0.1" color="#E67E22" 
-                animation="property: scale; to: 1.2 1.2 1.2; dir: alternate; dur: 1000; loop: true"
-                onclick="
-                  var info = document.querySelector('#info-box');
-                  document.querySelector('#info-text').setAttribute('value', 'Această operă timpurie reflectă respectul profund al lui Van Gogh pentru viața aspră a țăranilor, fiind pictată într-o paletă de culori pământii, întunecate, pentru a sublinia legătura directă a acestora cu munca pământului.');
-                  info.setAttribute('visible', 'true');
-                  info.setAttribute('position', '-5 2.2 -6');
-                  info.setAttribute('rotation', '0 0 0');
-                ">
-      </a-sphere>
-
-      <!-- Hotspot Autoportret (MUTAT pe peretele din față) -->
-      <a-sphere position="1.5 1.8 6.9" radius="0.1" color="#8D6E63" 
-                animation="property: scale; to: 1.2 1.2 1.2; dir: alternate; dur: 1000; loop: true"
-                onclick="
-                  var info = document.querySelector('#info-box');
-                  document.querySelector('#info-text').setAttribute('value', 'Numeroasele sale autoportrete \n functioneaza ca un jurnal vizual \n intens, in care artistul foloseste \n tuse energice si culori vibrante \n pentru a-si explora propria \n identitate si starile emotionale \n fluctuante.');
-                  info.setAttribute('visible', 'true');
-                  info.setAttribute('position', '0 2.2 6');
-                  info.setAttribute('rotation', '0 0 0');
-                ">
-      </a-sphere>
-
-      <!-- ========== INFO BOX ========== -->
+      <!-- ========== INFO BOX (ACTUALIZAT CU FUNCTII AI) ========== -->
       <a-entity id="info-box" position="0 2.5 -3" rotation="0 0 0" visible="false">
-        <!-- Fundal corectat (lățime mărită pentru a încăpea butonul X) -->
-        <a-plane width="3" height="1.5" color="#333" opacity="0.9"></a-plane>
-        <a-plane width="2.9" height="1.4" color="#F5E6C8" opacity="0.3" position="0 0 0.01"></a-plane>
-        <a-text id="info-text" value="" color="#FFF" align="center" width="2.5" position="0 0 0.02"></a-text>
-        <!-- Buton de închidere (poziționat corect în interiorul panoului) -->
-        <a-box position="1.3 0.6 0.02" width="0.3" height="0.15" depth="0.01" color="#AA4444" 
-               onclick="document.querySelector('#info-box').setAttribute('visible', 'false')">
-        </a-box>
-        <a-text value="X" color="#FFF" align="center" width="1.5" position="1.3 0.6 0.03"></a-text>
+        <a-plane width="3.2" height="2" color="#333" opacity="0.9"></a-plane>
+        <a-plane width="3.1" height="1.9" color="#F5E6C8" opacity="0.3" position="0 0 0.01"></a-plane>
+        
+        <!-- Text box ce suporta wrapping automat -->
+        <a-text id="info-text" value="" color="#FFF" align="center" width="2.8" wrap-count="35" position="0 0.3 0.02"></a-text>
+        
+        <!-- Buton de inchidere -->
+        <a-box position="1.4 0.8 0.02" width="0.3" height="0.15" depth="0.01" color="#AA4444" onclick="inchideInfo()"></a-box>
+        <a-text value="X" color="#FFF" align="center" width="1.5" position="1.4 0.8 0.03"></a-text>
+
+        <!-- ✨ Buton AI 1: Curiozitati / Secrete -->
+        <a-box position="-0.7 -0.6 0.02" width="1.3" height="0.3" depth="0.02" color="#8E44AD" onclick="cereSecretAI()"></a-box>
+        <a-text value="✨ Secret AI" color="#FFF" align="center" width="2.4" position="-0.7 -0.6 0.04"></a-text>
+
+        <!-- ✨ Buton AI 2: Poezie Generativa -->
+        <a-box position="0.7 -0.6 0.02" width="1.3" height="0.3" depth="0.02" color="#2980B9" onclick="cerePoezieAI()"></a-box>
+        <a-text value="✨ Poezie AI" color="#FFF" align="center" width="2.4" position="0.7 -0.6 0.04"></a-text>
       </a-entity>
 
       <!-- ========== TAVAN ========== -->
       <a-plane position="0 4 0" rotation="90 0 0" width="20" height="15" color="#F5F5F5" side="double"></a-plane>
-
-      <!-- Grinzi decorative tavan -->
       <a-box position="0 3.9 0" width="20" height="0.1" depth="0.3" color="#5D4037"></a-box>
       <a-box position="0 3.9 3" width="20" height="0.1" depth="0.3" color="#5D4037"></a-box>
       <a-box position="0 3.9 -3" width="20" height="0.1" depth="0.3" color="#5D4037"></a-box>
       <a-box position="0 3.9 6" width="20" height="0.1" depth="0.3" color="#5D4037"></a-box>
       <a-box position="0 3.9 -6" width="20" height="0.1" depth="0.3" color="#5D4037"></a-box>
+
+      <!-- ========== GHIDUL GALERIEI + CHESTIONAR ========== -->
+      <a-entity position="-0.26 2.5 1" rotation="0 -90 0">
+        <a-plane width="2.2" height="1.2" color="#574322"></a-plane>
+        <a-text value="GHIDUL GALERIEI\n\n1. Folositi tastele W,A,S,D pentru deplasare.\n2. Click pe sfere pentru informatii si magii AI.\n3. Ascultati replicile Călugărului." align="center" width="2" color="#ECF0F1" position="0 0 0.01"></a-text>
+      </a-entity>
+
+      <!-- Chestionar de evaluare -->
+      <a-entity id="chestionar" position="-0.26 1.1 1" rotation="0 -90 0">
+        <a-entity id="chestionar-form">
+          <a-plane width="2.4" height="1.6" color="#3E2723"></a-plane>
+          <a-plane width="2.3" height="1.5" color="#F5E6C8" opacity="0.95" position="0 0 0.01"></a-plane>
+          <a-text value="CHESTIONAR DE EVALUARE" align="center" width="2.5" color="#3E2723" position="0 0.55 0.02"></a-text>
+          <a-text value="Cum ti s-a parut galeria?" align="center" width="2" color="#5D4037" position="0 0.25 0.02"></a-text>
+          
+          <a-entity position="0 -0.05 0.02">
+            <a-plane id="r1" width="0.35" height="0.35" color="#555" position="-0.8 0 0" class="rating-btn"
+                     onclick="document.querySelectorAll('.rating-btn').forEach(b => b.setAttribute('color', '#555')); this.setAttribute('color', '#F1C40F'); document.querySelector('#chestionar-form').dataset.rating = 1;"></a-plane>
+            <a-text value="1" align="center" width="2" color="#FFF" position="-0.8 0 0.01"></a-text>
+            
+            <a-plane id="r2" width="0.35" height="0.35" color="#555" position="-0.4 0 0" class="rating-btn"
+                     onclick="document.querySelectorAll('.rating-btn').forEach(b => b.setAttribute('color', '#555')); this.setAttribute('color', '#F1C40F'); document.querySelector('#chestionar-form').dataset.rating = 2;"></a-plane>
+            <a-text value="2" align="center" width="2" color="#FFF" position="-0.4 0 0.01"></a-text>
+            
+            <a-plane id="r3" width="0.35" height="0.35" color="#555" position="0 0 0" class="rating-btn"
+                     onclick="document.querySelectorAll('.rating-btn').forEach(b => b.setAttribute('color', '#555')); this.setAttribute('color', '#F1C40F'); document.querySelector('#chestionar-form').dataset.rating = 3;"></a-plane>
+            <a-text value="3" align="center" width="2" color="#FFF" position="0 0 0.01"></a-text>
+            
+            <a-plane id="r4" width="0.35" height="0.35" color="#555" position="0.4 0 0" class="rating-btn"
+                     onclick="document.querySelectorAll('.rating-btn').forEach(b => b.setAttribute('color', '#555')); this.setAttribute('color', '#F1C40F'); document.querySelector('#chestionar-form').dataset.rating = 4;"></a-plane>
+            <a-text value="4" align="center" width="2" color="#FFF" position="0.4 0 0.01"></a-text>
+            
+            <a-plane id="r5" width="0.35" height="0.35" color="#555" position="0.8 0 0" class="rating-btn"
+                     onclick="document.querySelectorAll('.rating-btn').forEach(b => b.setAttribute('color', '#555')); this.setAttribute('color', '#F1C40F'); document.querySelector('#chestionar-form').dataset.rating = 5;"></a-plane>
+            <a-text value="5" align="center" width="2" color="#FFF" position="0.8 0 0.01"></a-text>
+          </a-entity>
+          
+          <a-text value="(1 = Slab, 5 = Excelent)" align="center" width="1.5" color="#777" position="0 -0.3 0.02"></a-text>
+          
+          <a-plane width="1.2" height="0.3" color="#2E7D32" position="0 -0.55 0.02" 
+                   onclick="if(document.querySelector('#chestionar-form').dataset.rating) { document.querySelector('#chestionar-form').setAttribute('visible', 'false'); document.querySelector('#chestionar-rezultat').setAttribute('visible', 'true'); }"></a-plane>
+          <a-text value="TRIMITE EVALUAREA" align="center" width="2" color="#FFF" position="0 -0.55 0.03"></a-text>
+        </a-entity>
+        
+        <a-entity id="chestionar-rezultat" visible="false" position="0 0 0.03">
+          <a-plane width="2.3" height="1.4" color="#2E7D32" opacity="0.95"></a-plane>
+          <a-text value="Va multumim pentru evaluare!" align="center" width="2.5" color="#FFF" position="0 0 0.01"></a-text>
+        </a-entity>
+      </a-entity>
+
+      <!-- ========== VIZITATORUL ========== -->
+      <a-entity id="calugar" vizitator>
+        <a-circle color="#000" radius="0.35" opacity="0.2" rotation="-90 0 0" position="0 0.02 0"></a-circle>
+        
+        <a-entity animation="property: position; dir: alternate; dur: 600; to: 0 0.08 0; loop: true; easing: easeInOutSine">
+          <a-cylinder color="#4b3621" radius="0.22" height="0.9" position="0 0.85 0"></a-cylinder>
+          <a-sphere color="#4b3621" radius="0.26" position="0 1.25 0"></a-sphere>
+          <a-sphere color="#3a2a19" radius="0.23" position="0 1.55 -0.06"></a-sphere>
+          <a-cone color="#3a2a19" radius-bottom="0.22" radius-top="0.08" height="0.3" position="0 1.7 -0.08" rotation="-20 0 0"></a-cone>
+          <a-sphere color="#e2a878" radius="0.17" position="0 1.52 0.04"></a-sphere>
+          <a-cone color="#dddddd" radius-bottom="0.16" radius-top="0.02" height="0.22" position="0 1.42 0.1" rotation="20 0 0"></a-cone>
+          <a-cylinder color="#2a1d12" radius="0.07" height="0.5" position="-0.1 0.25 0"></a-cylinder>
+          <a-cylinder color="#2a1d12" radius="0.07" height="0.5" position="0.1 0.25 0"></a-cylinder>
+          <a-cylinder color="#4b3621" radius="0.055" height="0.65" position="-0.3 1.05 0" rotation="0 0 8"></a-cylinder>
+          <a-cylinder color="#4b3621" radius="0.055" height="0.65" position="0.3 1.05 0" rotation="0 0 -8"></a-cylinder>
+          <a-sphere color="#e2a878" radius="0.06" position="-0.32 0.72 0"></a-sphere>
+          <a-sphere color="#e2a878" radius="0.06" position="0.32 0.72 0"></a-sphere>
+        </a-entity>
+      </a-entity>
+
+      <!-- ========== PISICA ========== -->
+      <a-entity id="pisica" pisica>
+        <a-circle color="#000" radius="0.15" opacity="0.15" rotation="-90 0 0" position="0 0.02 0"></a-circle>
+        
+        <a-entity id="pisica-pose">
+          <a-entity animation="property: position; dir: alternate; dur: 400; to: 0 0.03 0; loop: true; easing: easeInOutSine">
+            <a-sphere color="#FF8C00" radius="0.18" position="0 0.25 0" scale="1 0.8 1.3"></a-sphere>
+            <a-sphere color="#FFE4B5" radius="0.12" position="0 0.22 0.05" scale="1 0.7 1"></a-sphere>
+            <a-sphere color="#FF8C00" radius="0.14" position="0 0.45 0.18"></a-sphere>
+            <a-sphere color="#FFE4B5" radius="0.09" position="0 0.42 0.28"></a-sphere>
+            <a-cone color="#FF8C00" radius-bottom="0.06" radius-top="0.02" height="0.1" position="-0.08 0.56 0.18" rotation="0 0 15"></a-cone>
+            <a-cone color="#FF8C00" radius-bottom="0.06" radius-top="0.02" height="0.1" position="0.08 0.56 0.18" rotation="0 0 -15"></a-cone>
+            <a-cone color="#FFB6C1" radius-bottom="0.03" radius-top="0.01" height="0.06" position="-0.08 0.56 0.19" rotation="0 0 15"></a-cone>
+            <a-cone color="#FFB6C1" radius-bottom="0.03" radius-top="0.01" height="0.06" position="0.08 0.56 0.19" rotation="0 0 -15"></a-cone>
+            <a-sphere color="#32CD32" radius="0.025" position="-0.05 0.47 0.3"></a-sphere>
+            <a-sphere color="#32CD32" radius="0.025" position="0.05 0.47 0.3"></a-sphere>
+            <a-sphere color="#000" radius="0.012" position="-0.05 0.47 0.31"></a-sphere>
+            <a-sphere color="#000" radius="0.012" position="0.05 0.47 0.31"></a-sphere>
+            <a-sphere color="#FF69B4" radius="0.015" position="0 0.44 0.32"></a-sphere>
+            <a-cylinder color="#333" radius="0.003" height="0.08" position="-0.06 0.44 0.31" rotation="0 0 80"></a-cylinder>
+            <a-cylinder color="#333" radius="0.003" height="0.08" position="0.06 0.44 0.31" rotation="0 0 100"></a-cylinder>
+            <a-entity animation="property: rotation; dir: alternate; dur: 800; to: 0 0 30; loop: true; easing: easeInOutSine">
+              <a-cylinder color="#FF8C00" radius="0.03" height="0.25" position="0 0.3 -0.25" rotation="70 0 0"></a-cylinder>
+            </a-entity>
+            <a-cylinder color="#FF8C00" radius="0.04" height="0.15" position="-0.1 0.08 0.1"></a-cylinder>
+            <a-cylinder color="#FF8C00" radius="0.04" height="0.15" position="0.1 0.08 0.1"></a-cylinder>
+            <a-cylinder color="#FF8C00" radius="0.04" height="0.15" position="-0.1 0.08 -0.1"></a-cylinder>
+            <a-cylinder color="#FF8C00" radius="0.04" height="0.15" position="0.1 0.08 -0.1"></a-cylinder>
+            <a-sphere color="#FFE4B5" radius="0.045" position="-0.1 0.02 0.12"></a-sphere>
+            <a-sphere color="#FFE4B5" radius="0.045" position="0.1 0.02 0.12"></a-sphere>
+            <a-sphere color="#FFE4B5" radius="0.045" position="-0.1 0.02 -0.12"></a-sphere>
+            <a-sphere color="#FFE4B5" radius="0.045" position="0.1 0.02 -0.12"></a-sphere>
+          </a-entity>
+        </a-entity>
+      </a-entity>
+
+      <!-- 3. Player Audio -->
+      <a-entity id="muzica" sound="src: url(https://cdn.aframe.io/basic-guide/audio/backgroundnoise.wav); loop: true"></a-entity>
+      <a-box position="-0.30 1.5 0" width="0.2" height="0.2" depth="0.05" color="#2ECC71" rotation="0 -90 0"
+             onclick="var audio = document.querySelector('#muzica').components.sound; if(audio.isPlaying) { audio.pauseSound(); } else { audio.playSound(); }">
+        <a-text value="Play \nMuzica" color="white" align="center" position="0 0.2 0" scale="0.4 0.4 0.4"></a-text>
+      </a-box>
 
     </a-scene>
   </body>
